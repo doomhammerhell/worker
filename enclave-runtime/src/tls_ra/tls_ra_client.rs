@@ -112,6 +112,7 @@ where
 
 	/// Reads the payload header, indicating the sent payload length and type.
 	fn read_header(&mut self, start_bytes: Vec<u8>) -> EnclaveResult<TcpHeader> {
+		warn!("Read header, start bytes: {:?}", start_bytes);
 		// The first sent byte indicates the payload type.
 		let opcode: Opcode = start_bytes[0].into();
 		// The 8 bytes following afterwards indicate the payload length.

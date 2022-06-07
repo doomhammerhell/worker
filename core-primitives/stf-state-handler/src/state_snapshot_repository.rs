@@ -278,11 +278,12 @@ mod tests {
 		in_memory_state_file_io::InMemoryStateFileIo,
 		state_snapshot_repository_loader::StateSnapshotRepositoryLoader,
 	};
-	use std::{collections::hash_map::DefaultHasher, vec};
+	use itp_types::H256;
+	use std::vec;
 
 	type TestState = u64;
-	type TestStateHash = u64;
-	type TestFileIo = InMemoryStateFileIo<TestState, DefaultHasher>;
+	type TestStateHash = H256;
+	type TestFileIo = InMemoryStateFileIo<TestState>;
 	type TestSnapshotRepository = StateSnapshotRepository<TestFileIo, TestState, TestStateHash>;
 
 	const TEST_SNAPSHOT_REPOSITORY_CACHE_SIZE: usize = 3;
@@ -438,6 +439,6 @@ mod tests {
 	}
 
 	fn create_test_file_io(shards: &[ShardIdentifier]) -> Arc<TestFileIo> {
-		Arc::new(TestFileIo::new(DefaultHasher::default(), shards))
+		Arc::new(TestFileIo::new(shards))
 	}
 }

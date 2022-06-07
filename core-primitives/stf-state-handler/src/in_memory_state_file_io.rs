@@ -27,39 +27,34 @@ use crate::{
 	state_snapshot_primitives::StateId,
 };
 use codec::Encode;
-use itp_types::ShardIdentifier;
-use std::{collections::HashMap, hash::Hasher as HasherTrait, vec::Vec};
+use itp_types::{ShardIdentifier, H256};
+use sp_core::blake2_256;
+use std::{collections::HashMap, vec::Vec};
 
-type StateHash = u64;
+type StateHash = H256;
 type ShardDirectory<State> = HashMap<StateId, (StateHash, State)>;
 type ShardsRootDirectory<State> = HashMap<ShardIdentifier, ShardDirectory<State>>;
 
 /// State file I/O using (unencrypted) in-memory representation of the state files.
 /// Uses u64 hash type. Can be used as mock for testing.
 #[derive(Default)]
-pub struct InMemoryStateFileIo<State, Hasher>
+pub struct InMemoryStateFileIo<State>
 where
 	State: Clone + Default + Encode,
-	Hasher: HasherTrait + Clone + Default,
 {
 	emulated_shard_directory: RwLock<ShardsRootDirectory<State>>,
-	hasher: Hasher,
 }
 
-impl<State, Hasher> InMemoryStateFileIo<State, Hasher>
+impl<State> InMemoryStateFileIo<State>
 where
 	State: Clone + Default + Encode,
-	Hasher: HasherTrait + Clone + Default,
 {
 	#[allow(unused)]
-	pub fn new(hash_function: Hasher, shards: &[ShardIdentifier]) -> Self {
+	pub fn new(shards: &[ShardIdentifier]) -> Self {
 		let shard_hash_map: HashMap<_, _> =
 			shards.iter().map(|s| (*s, ShardDirectory::<State>::default())).collect();
 
-		InMemoryStateFileIo {
-			emulated_shard_directory: RwLock::new(shard_hash_map),
-			hasher: hash_function,
-		}
+		InMemoryStateFileIo { emulated_shard_directory: RwLock::new(shard_hash_map) }
 	}
 
 	#[cfg(test)]
@@ -76,9 +71,7 @@ where
 
 	fn compute_state_hash(&self, state: &State) -> StateHash {
 		let encoded_state = state.encode();
-		let mut hasher = self.hasher.clone();
-		hasher.write(encoded_state.as_slice());
-		hasher.finish()
+		blake2_256(&encoded_state).into()
 	}
 
 	fn default_states_map(&self, state_id: StateId) -> ShardDirectory<State> {
@@ -99,10 +92,9 @@ where
 	}
 }
 
-impl<State, Hasher> StateFileIo for InMemoryStateFileIo<State, Hasher>
+impl<State> StateFileIo for InMemoryStateFileIo<State>
 where
 	State: Clone + Default + Encode,
-	Hasher: HasherTrait + Clone + Default,
 {
 	type StateType = State;
 	type HashType = StateHash;
@@ -207,10 +199,10 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::{assert_matches::assert_matches, collections::hash_map::DefaultHasher};
+	use std::assert_matches::assert_matches;
 
 	type TestState = u64;
-	type TestStateFileIo = InMemoryStateFileIo<TestState, DefaultHasher>;
+	type TestStateFileIo = InMemoryStateFileIo<TestState>;
 
 	#[test]
 	fn shard_directory_is_empty_after_initialization() {
@@ -267,7 +259,7 @@ mod tests {
 		assert_eq!(TestState::default(), state_file_io.load(&shard_id, state_id).unwrap());
 		assert_eq!(1, state_file_io.list_state_ids_for_shard(&shard_id).unwrap().len());
 
-		assert_entry(&state_file_io, &shard_id, state_id, &StateHash::default(), &state_hash);
+		assert_entry(&state_file_io, &shard_id, state_id, &TestState::default(), &state_hash);
 	}
 
 	#[test]
@@ -371,7 +363,7 @@ mod tests {
 	}
 
 	fn create_in_memory_state_file_io(shards: &[ShardIdentifier]) -> TestStateFileIo {
-		InMemoryStateFileIo::new(DefaultHasher::default(), shards)
+		InMemoryStateFileIo::new(shards)
 	}
 
 	fn create_empty_in_memory_state_file_io() -> TestStateFileIo {

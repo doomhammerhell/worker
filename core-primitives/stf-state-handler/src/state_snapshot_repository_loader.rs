@@ -122,11 +122,11 @@ mod tests {
 
 	use super::*;
 	use crate::in_memory_state_file_io::InMemoryStateFileIo;
-	use std::collections::hash_map::DefaultHasher;
+	use itp_types::H256;
 
 	type TestState = u64;
-	type TestStateHash = u64;
-	type TestFileIo = InMemoryStateFileIo<TestState, DefaultHasher>;
+	type TestStateHash = H256;
+	type TestFileIo = InMemoryStateFileIo<TestState>;
 	type TestLoader = StateSnapshotRepositoryLoader<TestFileIo, TestState, TestStateHash>;
 
 	#[test]
@@ -195,7 +195,7 @@ mod tests {
 	}
 
 	fn create_test_fixtures(shards: &[ShardIdentifier]) -> (Arc<TestFileIo>, TestLoader) {
-		let file_io = Arc::new(TestFileIo::new(DefaultHasher::default(), shards));
+		let file_io = Arc::new(TestFileIo::new(shards));
 		let loader = StateSnapshotRepositoryLoader::new(file_io.clone());
 		(file_io, loader)
 	}
