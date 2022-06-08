@@ -74,7 +74,7 @@ where
 		}
 	}
 
-	#[cfg(test)]
+	#[cfg(any(test, feature = "test"))]
 	pub fn get_states_for_shard(
 		&self,
 		shard_identifier: &ShardIdentifier,
