@@ -283,7 +283,7 @@ mod tests {
 
 	type TestState = u64;
 	type TestStateHash = H256;
-	type TestFileIo = InMemoryStateFileIo<TestState>;
+	type TestFileIo = InMemoryStateFileIo<TestState, TestState>;
 	type TestSnapshotRepository = StateSnapshotRepository<TestFileIo, TestState, TestStateHash>;
 
 	const TEST_SNAPSHOT_REPOSITORY_CACHE_SIZE: usize = 3;
@@ -439,6 +439,11 @@ mod tests {
 	}
 
 	fn create_test_file_io(shards: &[ShardIdentifier]) -> Arc<TestFileIo> {
-		Arc::new(TestFileIo::new(shards))
+		Arc::new(TestFileIo::new(
+			shards,
+			Box::new(|x| x),
+			Box::new(|| TestState::default()),
+			Box::new(|x| x),
+		))
 	}
 }

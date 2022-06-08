@@ -126,7 +126,7 @@ mod tests {
 
 	type TestState = u64;
 	type TestStateHash = H256;
-	type TestFileIo = InMemoryStateFileIo<TestState>;
+	type TestFileIo = InMemoryStateFileIo<TestState, TestState>;
 	type TestLoader = StateSnapshotRepositoryLoader<TestFileIo, TestState, TestStateHash>;
 
 	#[test]
@@ -195,7 +195,12 @@ mod tests {
 	}
 
 	fn create_test_fixtures(shards: &[ShardIdentifier]) -> (Arc<TestFileIo>, TestLoader) {
-		let file_io = Arc::new(TestFileIo::new(shards));
+		let file_io = Arc::new(TestFileIo::new(
+			shards,
+			Box::new(|x| x),
+			Box::new(|| TestState::default()),
+			Box::new(|x| x),
+		));
 		let loader = StateSnapshotRepositoryLoader::new(file_io.clone());
 		(file_io, loader)
 	}

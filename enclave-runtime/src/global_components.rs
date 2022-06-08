@@ -63,12 +63,12 @@ use its_sidechain::{
 };
 use primitive_types::H256;
 use sgx_crypto_helper::rsa3072::Rsa3072KeyPair;
-use sgx_externalities::SgxExternalities;
+use sgx_externalities::{SgxExternalities, SgxExternalitiesType};
 use sp_core::ed25519::Pair;
 
 pub type EnclaveStateKeyRepository = KeyRepository<Aes, AesSeal>;
 pub type EnclaveShieldingKeyRepository = KeyRepository<Rsa3072KeyPair, Rsa3072Seal>;
-pub type EnclaveStateFileIo = InMemoryStateFileIo<StfState>;
+pub type EnclaveStateFileIo = InMemoryStateFileIo<SgxExternalitiesType, SgxExternalities>;
 //pub type EnclaveStateFileIo = SgxStateFileIo<EnclaveStateKeyRepository>;
 pub type EnclaveStateSnapshotRepository =
 	StateSnapshotRepository<EnclaveStateFileIo, StfState, H256>;
