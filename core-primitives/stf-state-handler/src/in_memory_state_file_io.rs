@@ -91,18 +91,6 @@ where
 		blake2_256(&encoded_state).into()
 	}
 
-	fn default_states_map(&self, state_id: StateId) -> ShardDirectory<State> {
-		self.initialize_states_map(state_id, (self.state_initializer)())
-	}
-
-	fn initialize_states_map(&self, state_id: StateId, state: State) -> ShardDirectory<State> {
-		HashMap::from([(state_id, self.generate_state_entry(state))])
-	}
-
-	fn generate_default_state_entry(&self) -> (StateHash, State) {
-		self.generate_state_entry((self.state_initializer)())
-	}
-
 	fn generate_state_entry(&self, state: State) -> (StateHash, State) {
 		let state_hash = self.compute_state_hash(&state);
 		(state_hash, state)
@@ -150,9 +138,8 @@ where
 	) -> Result<Self::HashType> {
 		let mut directory_lock =
 			self.emulated_shard_directory.write().map_err(|_| Error::LockPoisoning)?;
-		let states_for_shard = directory_lock
-			.entry(*shard_identifier)
-			.or_insert_with(|| self.default_states_map(state_id));
+
+		let states_for_shard = directory_lock.entry(*shard_identifier).or_default();
 		let state_entry = states_for_shard
 			.entry(state_id)
 			.or_insert_with(|| self.generate_state_entry((self.state_initializer)()));
@@ -168,16 +155,12 @@ where
 		let mut directory_lock =
 			self.emulated_shard_directory.write().map_err(|_| Error::LockPoisoning)?;
 
-		let states_for_shard = directory_lock
-			.entry(*shard_identifier)
-			.or_insert_with(|| self.default_states_map(state_id));
+		let states_for_shard = directory_lock.entry(*shard_identifier).or_default();
 
 		let inner_state = (self.state_selector)(external_state);
 		let state_hash = self.compute_state_hash(&inner_state);
 
-		*states_for_shard
-			.entry(state_id)
-			.or_insert_with(|| self.generate_default_state_entry()) = (state_hash, inner_state);
+		*states_for_shard.entry(state_id).or_default() = (state_hash, inner_state);
 
 		Ok(state_hash)
 	}
@@ -225,13 +208,10 @@ pub mod sgx {
 	use sgx_externalities::{SgxExternalities, SgxExternalitiesType};
 	use std::sync::Arc;
 
-	fn sgx_externalities_selector() -> InnerStateSelector<SgxExternalitiesType, SgxExternalities> {
-		Box::new(|s| s.state)
-	}
-
-	fn sgx_externalities_wrapper() -> ExternalStateGenerator<SgxExternalitiesType, SgxExternalities>
-	{
-		Box::new(|s| SgxExternalities { state: s, state_diff: Default::default() })
+	pub fn create_in_memory_state_io_from_shards_directories(
+	) -> Result<Arc<InMemoryStateFileIo<SgxExternalitiesType, SgxExternalities>>> {
+		let shards = list_shards()?;
+		Ok(create_in_memory_externalities_state_io(&shards))
 	}
 
 	pub fn create_sgx_externalities_in_memory_state_io(
@@ -239,7 +219,7 @@ pub mod sgx {
 		create_in_memory_externalities_state_io(&[])
 	}
 
-	pub fn create_in_memory_externalities_state_io(
+	fn create_in_memory_externalities_state_io(
 		shards: &[ShardIdentifier],
 	) -> Arc<InMemoryStateFileIo<SgxExternalitiesType, SgxExternalities>> {
 		Arc::new(InMemoryStateFileIo::new(
@@ -250,16 +230,13 @@ pub mod sgx {
 		))
 	}
 
-	pub fn create_in_memory_state_io_from_shards_directories(
-	) -> Result<Arc<InMemoryStateFileIo<SgxExternalitiesType, SgxExternalities>>> {
-		let shards = list_shards()?;
+	fn sgx_externalities_selector() -> InnerStateSelector<SgxExternalitiesType, SgxExternalities> {
+		Box::new(|s| s.state)
+	}
 
-		Ok(Arc::new(InMemoryStateFileIo::new(
-			&shards,
-			sgx_externalities_selector(),
-			Box::new(|| Stf::init_state().state),
-			sgx_externalities_wrapper(),
-		)))
+	fn sgx_externalities_wrapper() -> ExternalStateGenerator<SgxExternalitiesType, SgxExternalities>
+	{
+		Box::new(|s| SgxExternalities { state: s, state_diff: Default::default() })
 	}
 }
 
