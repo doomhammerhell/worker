@@ -94,8 +94,8 @@ where
 
 	/// Sends the header which includes the payload length and the Opcode indicating the payload type.
 	fn write_header(&mut self, tcp_header: TcpHeader) -> EnclaveResult<()> {
-		warn!("Write header, opcode: {:?}", tcp_header.opcode.to_bytes());
-		warn!("Write header, payload_length: {:?}", tcp_header.payload_length.to_be_bytes());
+		debug!("Write header, opcode: {:?}", tcp_header.opcode.to_bytes());
+		debug!("Write header, payload_length: {:?}", tcp_header.payload_length.to_be_bytes());
 		self.tls_stream.write(&tcp_header.opcode.to_bytes())?;
 		self.tls_stream.write(&tcp_header.payload_length.to_be_bytes())?;
 		Ok(())
