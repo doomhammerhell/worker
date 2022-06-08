@@ -25,30 +25,27 @@ use crate::{
 };
 use itp_types::ShardIdentifier;
 use log::*;
-use std::{
-	collections::VecDeque, fmt::Debug, iter::FromIterator, marker::PhantomData, sync::Arc, vec::Vec,
-};
+use std::{collections::VecDeque, fmt::Debug, iter::FromIterator, sync::Arc, vec::Vec};
 
 /// Loads a state snapshot repository from existing shards directory with state files.
-pub struct StateSnapshotRepositoryLoader<FileIo, State, HashType> {
+pub struct StateSnapshotRepositoryLoader<FileIo> {
 	file_io: Arc<FileIo>,
-	phantom_data: PhantomData<(State, HashType)>,
 }
 
-impl<FileIo, State, HashType> StateSnapshotRepositoryLoader<FileIo, State, HashType>
+impl<FileIo> StateSnapshotRepositoryLoader<FileIo>
 where
-	FileIo: StateFileIo<StateType = State, HashType = HashType>,
-	HashType: Copy + Eq + Debug,
+	FileIo: StateFileIo,
+	<FileIo as StateFileIo>::HashType: Copy + Eq + Debug,
 {
 	pub fn new(file_io: Arc<FileIo>) -> Self {
-		StateSnapshotRepositoryLoader { file_io, phantom_data: Default::default() }
+		StateSnapshotRepositoryLoader { file_io }
 	}
 
 	/// Load a state snapshot repository from an existing set of files and directories.
 	pub fn load_snapshot_repository(
 		&self,
 		snapshot_history_cache_size: usize,
-	) -> Result<StateSnapshotRepository<FileIo, State, HashType>> {
+	) -> Result<StateSnapshotRepository<FileIo>> {
 		let snapshot_history = self.load_and_initialize_state_snapshot_history()?;
 
 		StateSnapshotRepository::new(
@@ -58,7 +55,9 @@ where
 		)
 	}
 
-	fn load_and_initialize_state_snapshot_history(&self) -> Result<SnapshotHistory<HashType>> {
+	fn load_and_initialize_state_snapshot_history(
+		&self,
+	) -> Result<SnapshotHistory<FileIo::HashType>> {
 		let mut repository = SnapshotHistory::new();
 
 		let shards = self.file_io.list_shards()?;
@@ -100,7 +99,7 @@ where
 		&self,
 		shard: &ShardIdentifier,
 		state_ids: Vec<StateId>,
-	) -> Vec<StateSnapshotMetaData<HashType>> {
+	) -> Vec<StateSnapshotMetaData<FileIo::HashType>> {
 		state_ids
 			.into_iter()
 			.flat_map(|state_id| match self.file_io.compute_hash(shard, state_id) {
@@ -125,9 +124,8 @@ mod tests {
 	use itp_types::H256;
 
 	type TestState = u64;
-	type TestStateHash = H256;
 	type TestFileIo = InMemoryStateFileIo<TestState, TestState>;
-	type TestLoader = StateSnapshotRepositoryLoader<TestFileIo, TestState, TestStateHash>;
+	type TestLoader = StateSnapshotRepositoryLoader<TestFileIo>;
 
 	#[test]
 	fn loading_from_empty_shard_directories_initializes_files() {

@@ -39,7 +39,6 @@ use crate::{
 };
 use base58::ToBase58;
 use codec::Encode;
-use ita_stf::State as StfState;
 use itc_direct_rpc_server::{
 	create_determine_watch, rpc_connection_registry::ConnectionRegistry,
 	rpc_ws_handler::RpcWsHandler,
@@ -75,7 +74,6 @@ use its_sidechain::{
 	top_pool_executor::TopPoolOperationHandler,
 };
 use log::*;
-use primitive_types::H256;
 use sp_core::crypto::Pair;
 use std::{string::String, sync::Arc};
 
@@ -107,7 +105,7 @@ pub(crate) fn init_enclave(mu_ra_url: String, untrusted_worker_url: String) -> E
 	let state_file_io = create_in_memory_state_io_from_shards_directories()?;
 	//let state_file_io = Arc::new(EnclaveStateFileIo::new(state_key_repository.clone()));
 	let state_snapshot_repository_loader =
-		StateSnapshotRepositoryLoader::<EnclaveStateFileIo, StfState, H256>::new(state_file_io);
+		StateSnapshotRepositoryLoader::<EnclaveStateFileIo>::new(state_file_io);
 	let state_snapshot_repository =
 		state_snapshot_repository_loader.load_snapshot_repository(STATE_SNAPSHOTS_CACHE_SIZE)?;
 

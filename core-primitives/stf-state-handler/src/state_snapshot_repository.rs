@@ -26,7 +26,7 @@ use crate::{
 use core::ops::RangeBounds;
 use itp_types::ShardIdentifier;
 use log::*;
-use std::{collections::VecDeque, fmt::Debug, format, marker::PhantomData, sync::Arc, vec::Vec};
+use std::{collections::VecDeque, fmt::Debug, format, sync::Arc, vec::Vec};
 
 /// Trait for versioned state access. Manages history of state snapshots.
 pub trait VersionedStateAccess {
@@ -66,17 +66,20 @@ pub trait VersionedStateAccess {
 /// Keeps versions of state snapshots, cycles them in a fixed-size circular buffer.
 /// Creates a state snapshot for each write/update operation. Allows reverting to a specific snapshot,
 /// identified by a state hash. Snapshot files names includes a timestamp to be unique.
-pub struct StateSnapshotRepository<FileIo, State, HashType> {
+pub struct StateSnapshotRepository<FileIo>
+where
+	FileIo: StateFileIo,
+	<FileIo as StateFileIo>::HashType: Copy + Eq + Debug,
+{
 	file_io: Arc<FileIo>,
 	snapshot_history_cache_size: usize,
-	snapshot_history: SnapshotHistory<HashType>,
-	phantom_data: PhantomData<State>,
+	snapshot_history: SnapshotHistory<FileIo::HashType>,
 }
 
-impl<FileIo, State, HashType> StateSnapshotRepository<FileIo, State, HashType>
+impl<FileIo> StateSnapshotRepository<FileIo>
 where
-	FileIo: StateFileIo<StateType = State, HashType = HashType>,
-	HashType: Copy + Eq + Debug,
+	FileIo: StateFileIo,
+	<FileIo as StateFileIo>::HashType: Copy + Eq + Debug,
 {
 	/// Constructor, initialized with no shards or snapshot history.
 	pub fn empty(file_io: Arc<FileIo>, snapshot_history_cache_size: usize) -> Result<Self> {
@@ -89,24 +92,19 @@ where
 	pub(crate) fn new(
 		file_io: Arc<FileIo>,
 		snapshot_history_cache_size: usize,
-		snapshot_history: SnapshotHistory<HashType>,
+		snapshot_history: SnapshotHistory<FileIo::HashType>,
 	) -> Result<Self> {
 		if snapshot_history_cache_size == 0usize {
 			return Err(Error::ZeroCacheSize)
 		}
 
-		Ok(StateSnapshotRepository {
-			file_io,
-			snapshot_history_cache_size,
-			snapshot_history,
-			phantom_data: Default::default(),
-		})
+		Ok(StateSnapshotRepository { file_io, snapshot_history_cache_size, snapshot_history })
 	}
 
 	fn get_snapshot_history_mut(
 		&mut self,
 		shard_identifier: &ShardIdentifier,
-	) -> Result<&mut VecDeque<StateSnapshotMetaData<HashType>>> {
+	) -> Result<&mut VecDeque<StateSnapshotMetaData<FileIo::HashType>>> {
 		self.snapshot_history
 			.get_mut(shard_identifier)
 			.ok_or_else(|| Error::InvalidShard(*shard_identifier))
@@ -115,7 +113,7 @@ where
 	fn get_snapshot_history(
 		&self,
 		shard_identifier: &ShardIdentifier,
-	) -> Result<&VecDeque<StateSnapshotMetaData<HashType>>> {
+	) -> Result<&VecDeque<StateSnapshotMetaData<FileIo::HashType>>> {
 		self.snapshot_history
 			.get(shard_identifier)
 			.ok_or_else(|| Error::InvalidShard(*shard_identifier))
@@ -124,7 +122,7 @@ where
 	fn get_latest_snapshot_metadata(
 		&self,
 		shard_identifier: &ShardIdentifier,
-	) -> Result<&StateSnapshotMetaData<HashType>> {
+	) -> Result<&StateSnapshotMetaData<FileIo::HashType>> {
 		let snapshot_history = self.get_snapshot_history(shard_identifier)?;
 		snapshot_history.front().ok_or(Error::EmptyRepository)
 	}
@@ -149,7 +147,7 @@ where
 	fn remove_snapshots(
 		&self,
 		shard_identifier: &ShardIdentifier,
-		snapshots_metadata: &[StateSnapshotMetaData<HashType>],
+		snapshots_metadata: &[StateSnapshotMetaData<FileIo::HashType>],
 	) {
 		for snapshot_metadata in snapshots_metadata {
 			if let Err(e) = self.file_io.remove(shard_identifier, snapshot_metadata.state_id) {
@@ -163,8 +161,8 @@ where
 	fn write_new_state(
 		&self,
 		shard_identifier: &ShardIdentifier,
-		state: State,
-	) -> Result<(HashType, StateId)> {
+		state: FileIo::StateType,
+	) -> Result<(FileIo::HashType, StateId)> {
 		let state_id = generate_current_timestamp_state_id();
 		let state_hash = self.file_io.write(shard_identifier, state_id, state)?;
 		Ok((state_hash, state_id))
@@ -173,20 +171,19 @@ where
 	fn load_state(
 		&self,
 		shard_identifier: &ShardIdentifier,
-		snapshot_metadata: &StateSnapshotMetaData<HashType>,
-	) -> Result<State> {
+		snapshot_metadata: &StateSnapshotMetaData<FileIo::HashType>,
+	) -> Result<FileIo::StateType> {
 		self.file_io.load(shard_identifier, snapshot_metadata.state_id)
 	}
 }
 
-impl<FileIo, State, HashType> VersionedStateAccess
-	for StateSnapshotRepository<FileIo, State, HashType>
+impl<FileIo> VersionedStateAccess for StateSnapshotRepository<FileIo>
 where
-	FileIo: StateFileIo<StateType = State, HashType = HashType>,
-	HashType: Copy + Eq + Debug,
+	FileIo: StateFileIo,
+	<FileIo as StateFileIo>::HashType: Copy + Eq + Debug,
 {
-	type StateType = State;
-	type HashType = HashType;
+	type StateType = FileIo::StateType;
+	type HashType = FileIo::HashType;
 
 	fn load_latest(&self, shard_identifier: &ShardIdentifier) -> Result<Self::StateType> {
 		let latest_snapshot_metadata = self.get_latest_snapshot_metadata(shard_identifier)?;
@@ -282,9 +279,8 @@ mod tests {
 	use std::vec;
 
 	type TestState = u64;
-	type TestStateHash = H256;
 	type TestFileIo = InMemoryStateFileIo<TestState, TestState>;
-	type TestSnapshotRepository = StateSnapshotRepository<TestFileIo, TestState, TestStateHash>;
+	type TestSnapshotRepository = StateSnapshotRepository<TestFileIo>;
 
 	const TEST_SNAPSHOT_REPOSITORY_CACHE_SIZE: usize = 3;
 

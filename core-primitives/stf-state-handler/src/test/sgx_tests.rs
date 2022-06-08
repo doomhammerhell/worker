@@ -42,8 +42,8 @@ const STATE_SNAPSHOTS_CACHE_SIZE: usize = 3;
 
 type StateKeyRepositoryMock = KeyRepositoryMock<Aes>;
 type TestStateFileIo = SgxStateFileIo<StateKeyRepositoryMock>;
-type TestStateRepository = StateSnapshotRepository<TestStateFileIo, StfState, H256>;
-type TestStateRepositoryLoader = StateSnapshotRepositoryLoader<TestStateFileIo, StfState, H256>;
+type TestStateRepository = StateSnapshotRepository<TestStateFileIo>;
+type TestStateRepositoryLoader = StateSnapshotRepositoryLoader<TestStateFileIo>;
 type TestStateHandler = StateHandler<TestStateRepository>;
 
 /// Directory handle to automatically initialize a directory
