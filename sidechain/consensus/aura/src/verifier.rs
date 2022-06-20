@@ -15,7 +15,7 @@
 
 */
 
-use crate::{authorities, slot_author, EnclaveOnChainOCallApi};
+use crate::{authorities, slot_author, AuthorityId, EnclaveOnChainOCallApi};
 use core::marker::PhantomData;
 use frame_support::ensure;
 use itp_utils::stringify::public_to_string;
@@ -27,7 +27,7 @@ use log::*;
 use sidechain_primitives::{
 	traits::{
 		Block as SidechainBlockTrait, BlockData, Header as HeaderTrait,
-		SignedBlock as SignedSidechainBlockTrait,
+		SignedBlock as SignedSidechainBlockTrait, SignedBlock,
 	},
 	types::block::BlockHash,
 };
@@ -75,57 +75,85 @@ where
 		parentchain_header: &ParentchainBlock::Header,
 		ctx: &Self::Context,
 	) -> Result<Self::BlockImportParams, ConsensusError> {
-		ensure!(
-			signed_block.verify_signature(),
-			ConsensusError::BadSidechainBlock(signed_block.block().hash(), "bad signature".into())
-		);
+		let authorities =
+			authorities::<_, AuthorityPair, ParentchainBlock::Header>(ctx, parentchain_header)?;
 
-		let slot = slot_from_timestamp_and_duration(
-			Duration::from_millis(signed_block.block().block_data().timestamp()),
-			self.slot_duration,
-		);
-
-		// We need to check the ancestry first to ensure that an already imported block does not result
-		// in an author verification error, but rather a `BlockAlreadyImported` error.
-		match self.sidechain_state.get_last_block() {
-			Some(last_block) => verify_block_ancestry::<SignedSidechainBlock::Block>(
-				signed_block.block(),
-				&last_block,
-			)?,
-			None => ensure_first_block(signed_block.block())?,
-		}
-
-		if let Err(e) = verify_author::<
+		verify_sidechain_block::<
 			AuthorityPair,
-			ParentchainBlock::Header,
+			ParentchainBlock,
 			SignedSidechainBlock,
-			_,
-		>(&slot, signed_block.block(), parentchain_header, ctx)
-		{
-			error!(
-				"Author verification for block (number: {}) failed, block will be discarded",
-				signed_block.block().header().block_number()
-			);
-			return Err(e)
-		}
-
-		Ok(signed_block)
+			SidechainState,
+		>(
+			signed_block,
+			self.slot_duration,
+			&self.sidechain_state.get_last_block(),
+			parentchain_header,
+			&authorities,
+		)
 	}
 }
 
+fn verify_sidechain_block<AuthorityPair, ParentchainBlock, SignedSidechainBlock, SidechainState>(
+	signed_block: SignedSidechainBlock,
+	slot_duration: Duration,
+	last_block: &Option<<SignedSidechainBlock as SignedBlock>::Block>,
+	parentchain_header: &ParentchainBlock::Header,
+	authorities: &[AuthorityId<AuthorityPair>],
+) -> Result<SignedSidechainBlock, ConsensusError>
+where
+	AuthorityPair: Pair,
+	AuthorityPair::Public: Debug,
+	ParentchainBlock: ParentchainBlockTrait<Hash = BlockHash>,
+	SidechainState: LastBlockExt<SignedSidechainBlock::Block> + Send + Sync,
+	SignedSidechainBlock: 'static + SignedSidechainBlockTrait<Public = AuthorityPair::Public>,
+	SignedSidechainBlock::Block: SidechainBlockTrait,
+{
+	ensure!(
+		signed_block.verify_signature(),
+		ConsensusError::BadSidechainBlock(signed_block.block().hash(), "bad signature".into())
+	);
+
+	let slot = slot_from_timestamp_and_duration(
+		Duration::from_millis(signed_block.block().block_data().timestamp()),
+		slot_duration,
+	);
+
+	// We need to check the ancestry first to ensure that an already imported block does not result
+	// in an author verification error, but rather a `BlockAlreadyImported` error.
+	match last_block {
+		Some(last_block) =>
+			verify_block_ancestry::<SignedSidechainBlock::Block>(signed_block.block(), last_block)?,
+		None => ensure_first_block(signed_block.block())?,
+	}
+
+	if let Err(e) = verify_author::<AuthorityPair, ParentchainBlock::Header, SignedSidechainBlock>(
+		&slot,
+		signed_block.block(),
+		parentchain_header,
+		authorities,
+	) {
+		error!(
+			"Author verification for block (number: {}) failed, block will be discarded",
+			signed_block.block().header().block_number()
+		);
+		return Err(e)
+	}
+
+	Ok(signed_block)
+}
+
 /// Verify that the `blocks` author is the expected author when comparing with onchain data.
-fn verify_author<AuthorityPair, ParentchainHeader, SignedSidechainBlock, Context>(
+fn verify_author<AuthorityPair, ParentchainHeader, SignedSidechainBlock>(
 	slot: &Slot,
 	block: &SignedSidechainBlock::Block,
 	parentchain_head: &ParentchainHeader,
-	ctx: &Context,
+	authorities: &[AuthorityId<AuthorityPair>],
 ) -> Result<(), ConsensusError>
 where
 	AuthorityPair: Pair,
 	AuthorityPair::Public: Debug,
 	SignedSidechainBlock: SignedSidechainBlockTrait<Public = AuthorityPair::Public> + 'static,
 	ParentchainHeader: ParentchainHeaderTrait<Hash = BlockHash>,
-	Context: ValidateerFetch + EnclaveOnChainOCallApi,
 {
 	ensure!(
 		parentchain_head.hash() == block.block_data().layer_one_head(),
@@ -135,9 +163,7 @@ where
 		)
 	);
 
-	let authorities = authorities::<_, AuthorityPair, ParentchainHeader>(ctx, parentchain_head)?;
-
-	let expected_author = slot_author::<AuthorityPair>(*slot, &authorities)
+	let expected_author = slot_author::<AuthorityPair>(*slot, authorities)
 		.ok_or_else(|| ConsensusError::CouldNotGetAuthorities("No authorities found".into()))?;
 
 	ensure!(
