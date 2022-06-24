@@ -114,7 +114,6 @@ mod worker_peers_updater;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub type EnclaveWorker = Worker<Config, NodeApiFactory, Enclave, InitializationHandler>;
-
 fn main() {
 	// Setup logging
 	env_logger::init();
@@ -390,7 +389,7 @@ fn start_worker<E, T, D, InitializationHandler>(
 		enclave.mock_register_xt(node_api.genesis_hash, nonce, &trusted_url).unwrap()
 	} else {
 		enclave
-			.perform_ra(genesis_hash, nonce, trusted_url.as_bytes().to_vec())
+			.perform_dcap_ra(genesis_hash, nonce, trusted_url.as_bytes().to_vec())
 			.unwrap()
 	};
 

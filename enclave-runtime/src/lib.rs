@@ -67,6 +67,7 @@ use std::{boxed::Box, slice, vec::Vec};
 use substrate_api_client::compose_extrinsic_offline;
 
 mod attestation;
+mod dcap_attestation;
 mod global_components;
 mod initialization;
 mod ipfs;
