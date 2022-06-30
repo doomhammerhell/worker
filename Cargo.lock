@@ -2250,7 +2250,6 @@ dependencies = [
  "frame-support",
  "frame-system",
  "integritee-node-runtime",
- "itp-settings",
  "itp-storage",
  "itp-types",
  "itp-utils",
@@ -2684,6 +2683,7 @@ name = "itp-stf-executor"
 version = "0.8.0"
 dependencies = [
  "ita-stf",
+ "itp-node-api-extensions",
  "itp-ocall-api",
  "itp-sgx-crypto",
  "itp-stf-state-handler",
